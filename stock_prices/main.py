@@ -25,7 +25,8 @@ def fetch_stock_price(symbol):
     data = stock.history(period="1d")
     if data.empty:
         raise ValueError("No stock data found for the symbol.")
-    return data['Close'][0]
+    print(f"Stock price for {symbol} is {data['Close'].iloc[0]}")
+    return data['Close'].iloc[0]
 
 # Next, let's write a function that saves stock prices to a Postgres database.
 @DBOS.transaction()
