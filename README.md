@@ -1,8 +1,7 @@
 # Welcome to DBOS!
 
-This is a sample app built with DBOS and FastAPI.
-It displays greetings to visitors and keeps track of how many times each visitor has been greeted.
-Check out the source code in `<app-name>/main.py`!
+This app uses DBOS to monitor stock prices and store them in a Postgres database.
+Check out the source code in `stock_prices/main.py`!
 
 ### Running Locally
 
@@ -20,8 +19,6 @@ Then run:
 dbos migrate
 dbos start
 ```
-
-Visit [`http://localhost:8000`](http://localhost:8000) to see your app!
 
 ### Deploying to the Cloud
 

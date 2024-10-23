@@ -17,7 +17,25 @@ import threading
 
 DBOS()
 
-# Configure a job to periodically fetch stock prices
+# Then let's write a function that fetches stock prices from Yahoo Finance.
+# We annotate this function with `@DBOS.step` so we can call it from a durable workflow later on.
+@DBOS.step()
+def fetch_stock_price(symbol):
+    stock = yf.Ticker(symbol)
+    data = stock.history(period="1d")
+    if data.empty:
+        raise ValueError("No stock data found for the symbol.")
+    return data['Close'][0]
+
+# Next, let's write a function that saves stock prices to a Postgres database.
+@DBOS.transaction()
+def save_to_db(symbol, price):
+    DBOS.sql_session.execute(stock_prices.insert().values(stock_symbol=symbol, stock_price=price))
+
+# Then, let's write a scheduled job that fetches stock prices for a list of symbols every minute
+# The @DBOS.scheduled() decorator tells DBOS to run this function on a cron schedule.
+# The @DBOS.workflow() decorator tells DBOS to run this function as a reliable workflow,
+# so it runs exactly-once per minute and you'll never record a duplicate.
 @DBOS.scheduled('* * * * *')
 @DBOS.workflow()
 def fetch_stock_prices_workflow(scheduled_time: datetime, actual_time: datetime):
@@ -27,33 +45,10 @@ def fetch_stock_prices_workflow(scheduled_time: datetime, actual_time: datetime)
         save_to_db(symbol, price)
         # If wanted, push to cloudwatch using boto3
 
-@DBOS.step()
-def fetch_stock_price(symbol):
-    stock = yf.Ticker(symbol)
-    data = stock.history(period="1d")
-    if data.empty:
-        raise ValueError("No stock data found for the symbol.")
-    print(data)
-    return data['Close'][0]
-
-@DBOS.transaction()
-def save_to_db(symbol, price):
-    DBOS.sql_session.execute(stock_prices.insert().values(stock_symbol=symbol, stock_price=price))
-
 # Finally, in our main function, let's launch DBOS, then sleep the main thread forever
 # while the background threads run.
 if __name__ == "__main__":
     DBOS.launch()
     threading.Event().wait()
 
-# To deploy this app to DBOS Cloud:
-# - "npm i -g @dbos-inc/dbos-cloud@latest" to install the Cloud CLI (requires Node)
-# - "dbos-cloud app deploy" to deploy your app
-# - Deploy outputs a URL--visit it to see your app!
-
-
-# To run this app locally:
-# - Make sure you have a Postgres database to connect to
-# - "dbos migrate" to set up your database tables
-# - "dbos start" to start the app
-# - Visit localhost:8000 to see your app!
+# To deploy this app to the cloud as a persistent cron job, run `dbos-cloud app deploy`
