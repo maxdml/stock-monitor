@@ -46,9 +46,11 @@ def load_data():
     )
     df = pd.read_sql(query, engine)
     df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df['rate_of_change'] = df.groupby('stock_symbol')['stock_price'].pct_change() * 100
     return df.drop(columns=["id"])
 
 df = load_data()
+
 
 # Create a sidebar with a dropdown filter for stock symbols
 with st.sidebar:
@@ -59,25 +61,33 @@ with st.sidebar:
         options=stock_symbols,
         index=0 # Select "All" by default
     )
+    st.header("Display")
+    display_mode = st.selectbox(
+        "Select Display Mode",
+        options=["Stock Prices", "Rate of Change"],
+        index=1 # Select "Rate of Change" by default
+    )
+
 if stock_symbol_filter == "All":
     filtered_df = df
 else:
     filtered_df = df[df['stock_symbol'] == stock_symbol_filter]
-
-# Calculate the maximum stock price in the DataFrame
-max_stock_price = filtered_df['stock_price'].max()
-# Define a buffer above the maximum value for the y-axis limit
-buffer = 0.05 * max_stock_price  # 5% above the maximum
-y_max_limit = max_stock_price + buffer
+if display_mode == "Stock Prices":
+    y_label = "Stock Price"
+    y_column = "stock_price"
+else:
+    y_label = "Rate of Change (%)"
+    y_column = "rate_of_change"
 
 # Now let's group the stock prices by stock symbol and plot them using Plotly Express.
 fig = px.line(
-    filtered_df, x='timestamp', y='stock_price', color='stock_symbol',
-    markers=True, title='Stock Prices over time'
+    filtered_df, x='timestamp', y=y_column, color='stock_symbol',
+    markers=True, title='Stocks Values Over Time'
 )
-
-# Update the y-axis limit
-fig.update_yaxes(range=[0, y_max_limit])
+# Set the x-axis title
+fig.update_xaxes(title_text="Timestamp")
+# Set the y-axis title
+fig.update_yaxes(title_text=y_label)
 
 # Display the plot in Streamlit
 st.plotly_chart(fig)
