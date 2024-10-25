@@ -40,7 +40,7 @@ def save_to_db(symbol, price):
 @DBOS.scheduled('* * * * *')
 @DBOS.workflow()
 def fetch_stock_prices_workflow(scheduled_time: datetime, actual_time: datetime):
-    symbols = ['AAPL', 'GOOGL', 'AMZN', 'MSFT', 'TSLA']
+    symbols = ['AAPL', 'GOOGL', 'AMZN', 'MSFT', 'TSLA', 'NVDA']
     for symbol in symbols:
         price = fetch_stock_price(symbol)
         save_to_db(symbol, price)
