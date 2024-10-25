@@ -28,7 +28,7 @@ st.markdown(
         """,
     unsafe_allow_html=True,
 )
-st.title("Stock Prices")
+st.title("Stock Watcher")
 st.markdown(
     "This app uses DBOS to fetch stock prices from Yahoo Finance, store them into Postgres, and display them using Streamlit."
 )
@@ -71,10 +71,9 @@ buffer = 0.05 * max_stock_price  # 5% above the maximum
 y_max_limit = max_stock_price + buffer
 
 # Now let's group the stock prices by stock symbol and plot them using Plotly Express.
-st.write("### Stock Prices by Symbol")
 fig = px.line(
     filtered_df, x='timestamp', y='stock_price', color='stock_symbol',
-    markers=True, title='Stock Prices by Symbol'
+    markers=True, title='Stock Prices over time'
 )
 
 # Update the y-axis limit
