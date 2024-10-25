@@ -20,6 +20,8 @@ dbos migrate
 dbos start
 ```
 
+Visit http://localhost:8000 to monitor some stock prices!
+
 ### Deploying to the Cloud
 
 To deploy this app to DBOS Cloud, first install the DBOS Cloud CLI (requires Node):
