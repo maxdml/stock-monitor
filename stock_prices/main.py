@@ -8,10 +8,10 @@
 # First, let's do imports, and initialize DBOS.
 
 from dbos import DBOS
-
 from schema import stock_prices
-
 import yfinance as yf
+from twilio.rest import Client
+import os
 import datetime
 import threading
 
@@ -25,13 +25,32 @@ def fetch_stock_price(symbol):
     data = stock.history(period="1d")
     if data.empty:
         raise ValueError("No stock data found for the symbol.")
-    print(f"Stock price for {symbol} is {data['Close'].iloc[0]}")
+    DBOS.logger.info(f"Stock price for {symbol} is {data['Close'].iloc[0]}")
     return data['Close'].iloc[0]
 
 # Next, let's write a function that saves stock prices to a Postgres database.
 @DBOS.transaction()
 def save_to_db(symbol, price):
     DBOS.sql_session.execute(stock_prices.insert().values(stock_symbol=symbol, stock_price=price))
+
+# Now, let's write a function that will send a SMS to our number whenever a stock price goes above a certain threshold.
+# We will use Twilio for this. You can sign up for a free Twilio account at https://www.twilio.com/try-twilio
+symbols = ['AAPL', 'GOOGL', 'AMZN', 'MSFT', 'TSLA', 'NVDA']
+tresholds = {'MSFT': 400 }
+twilio_account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
+twilio_auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
+twilio_phone_number = os.environ.get('TWILIO_PHONE_NUMBER')
+my_phone_number = os.environ.get('MY_PHONE_NUMBER')
+@DBOS.step()
+def send_sms(symbol, price):
+    if symbol in tresholds and price > tresholds[symbol]:
+        client = Client(twilio_account_sid, twilio_auth_token)
+        message = client.messages.create(
+            body=f"{symbol} stock price is {price}.",
+            from_=twilio_phone_number,
+            to=my_phone_number
+        )
+        DBOS.logger.info(f"SMS sent: {message.sid}")
 
 # Then, let's write a scheduled job that fetches stock prices for a list of symbols every minute
 # The @DBOS.scheduled() decorator tells DBOS to run this function on a cron schedule.
@@ -40,11 +59,10 @@ def save_to_db(symbol, price):
 @DBOS.scheduled('* * * * *')
 @DBOS.workflow()
 def fetch_stock_prices_workflow(scheduled_time: datetime, actual_time: datetime):
-    symbols = ['AAPL', 'GOOGL', 'AMZN', 'MSFT', 'TSLA', 'NVDA']
     for symbol in symbols:
         price = fetch_stock_price(symbol)
         save_to_db(symbol, price)
-        # If wanted, push to cloudwatch using boto3
+        send_sms(symbol, price)
 
 # Finally, in our main function, let's launch DBOS, then sleep the main thread forever
 # while the background threads run.
