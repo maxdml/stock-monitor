@@ -12,6 +12,7 @@ from schema import stock_prices
 import yfinance as yf
 from twilio.rest import Client
 import os
+import pytz
 import datetime
 import threading
 
@@ -52,22 +53,37 @@ def send_sms(symbol, price):
         )
         DBOS.logger.info(f"SMS sent: {message.sid}")
 
-# Then, let's write a scheduled job that fetches stock prices for a list of symbols every minute
+# Then, let's write a scheduled job that fetches stock prices for a list of symbols every minute (except weekends).
 # The @DBOS.scheduled() decorator tells DBOS to run this function on a cron schedule.
 # The @DBOS.workflow() decorator tells DBOS to run this function as a reliable workflow,
 # so it runs exactly-once per minute and you'll never record a duplicate.
-@DBOS.scheduled('* * * * *')
+@DBOS.scheduled('* * * * 1-5')
 @DBOS.workflow()
 def fetch_stock_prices_workflow(scheduled_time: datetime, actual_time: datetime):
-    for symbol in symbols:
-        price = fetch_stock_price(symbol)
-        save_to_db(symbol, price)
-        send_sms(symbol, price)
+    if is_trading_hours():
+        for symbol in symbols:
+            price = fetch_stock_price(symbol)
+            save_to_db(symbol, price)
+            send_sms(symbol, price)
 
 # Finally, in our main function, let's launch DBOS, then sleep the main thread forever
 # while the background threads run.
 if __name__ == "__main__":
     DBOS.launch()
     threading.Event().wait()
-
 # To deploy this app to the cloud as a persistent cron job, run `dbos-cloud app deploy`
+
+
+### HELPERS
+
+# A utility function to check whether we are in trading hours
+def is_trading_hours():
+    # Define the timezone for the stock exchange (Eastern Time)
+    eastern = pytz.timezone('America/New_York')
+    # Get the current time in Eastern Time
+    now = datetime.now(eastern)
+    if now.hour < 9 or (now.hour == 9 and now.minute < 30):  # Before 9:30 AM
+        return False
+    if now.hour > 16 or (now.hour == 16 and now.minute > 0):  # After 4:00 PM
+        return False
+    return True
