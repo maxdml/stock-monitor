@@ -36,12 +36,15 @@ def save_to_db(symbol, price):
 
 # Now, let's write a function that will send a SMS to our number whenever a stock price goes above a certain threshold.
 # We will use Twilio for this. You can sign up for a free Twilio account at https://www.twilio.com/try-twilio
-symbols = ['AAPL', 'GOOGL', 'AMZN', 'MSFT', 'TSLA', 'NVDA']
-tresholds = {'MSFT': 1000 } # Time to sell ;)
+# We will use environment variables to store our Twilio account SID, auth token, phone number, and our own phone number.
+# See dbos-config.yaml
 twilio_account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
 twilio_auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
 twilio_phone_number = os.environ.get('TWILIO_PHONE_NUMBER')
 my_phone_number = os.environ.get('MY_PHONE_NUMBER')
+# Define a list of stock symbols to monitor and their respective alert thresholds.
+symbols = ['AAPL', 'GOOGL', 'AMZN', 'MSFT', 'TSLA', 'NVDA']
+tresholds = {'MSFT': 1000 } # Time to sell ;)
 @DBOS.step()
 def send_sms(symbol, price):
     if symbol in tresholds and price > tresholds[symbol]:
