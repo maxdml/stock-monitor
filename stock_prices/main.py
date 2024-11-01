@@ -8,7 +8,7 @@
 # First, let's do imports, and initialize DBOS.
 
 from dbos import DBOS
-from schema import stock_prices
+from schema import stock_prices, alerts
 import yfinance as yf
 from twilio.rest import Client
 import os
@@ -43,50 +43,46 @@ twilio_auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
 twilio_phone_number = os.environ.get('TWILIO_PHONE_NUMBER')
 my_phone_number = os.environ.get('MY_PHONE_NUMBER')
 # Define a list of stock symbols to monitor and their respective alert thresholds.
-symbols = ['AAPL', 'GOOGL', 'AMZN', 'MSFT', 'TSLA', 'NVDA']
-tresholds = {'MSFT': 1000 } # Time to sell ;)
 @DBOS.step()
-def send_sms(symbol, price):
-    if symbol in tresholds and price > tresholds[symbol]:
-        client = Client(twilio_account_sid, twilio_auth_token)
-        message = client.messages.create(
-            body=f"{symbol} stock price is {price}.",
-            from_=twilio_phone_number,
-            to=my_phone_number
-        )
-        DBOS.logger.info(f"SMS sent: {message.sid}")
+def send_sms_alert(symbol, price):
+    client = Client(twilio_account_sid, twilio_auth_token)
+    message = client.messages.create(
+        body=f"{symbol} stock price is {price}.",
+        from_=twilio_phone_number,
+        to=my_phone_number
+    )
+    DBOS.logger.info(f"SMS sent: {message.sid}")
 
-# Then, let's write a scheduled job that fetches stock prices for a list of symbols every minute (except weekends).
+# We need a small function to retrieve alerts from the database
+@DBOS.transaction()
+def fetch_alerts():
+    query = alerts.select()
+    return {alert.stock_symbol:alert for alert in DBOS.sql_session.execute(query).fetchall()}
+
+# Then, let's write a scheduled job that fetches stock prices for a list of symbols every minute.
 # The @DBOS.scheduled() decorator tells DBOS to run this function on a cron schedule.
 # The @DBOS.workflow() decorator tells DBOS to run this function as a reliable workflow,
 # so it runs exactly-once per minute and you'll never record a duplicate.
-@DBOS.scheduled('* * * * 1-5')
+symbols = ['AAPL', 'GOOGL', 'AMZN', 'MSFT', 'TSLA', 'NVDA']
+@DBOS.scheduled('* * * * *')
 @DBOS.workflow()
 def fetch_stock_prices_workflow(scheduled_time: datetime, actual_time: datetime):
-    if is_trading_hours():
-        for symbol in symbols:
-            price = fetch_stock_price(symbol)
-            save_to_db(symbol, price)
-            send_sms(symbol, price)
+    # Fetch registered alerts
+    registered_alerts = fetch_alerts()
+    # Fetch stock prices for each symbol
+    for symbol in symbols:
+        price = fetch_stock_price(symbol)
+        save_to_db(symbol, price)
+        # If there is a registered alert for that symbol, send a SMS if the price is above the alert threshold
+        if registered_alerts and symbol in registered_alerts:
+            if price > registered_alerts[symbol].price_threshold:
+                send_sms_alert(symbol, price)
 
 # Finally, in our main function, let's launch DBOS, then sleep the main thread forever
 # while the background threads run.
 if __name__ == "__main__":
     DBOS.launch()
+    # Run the workflow manually once
+    fetch_stock_prices_workflow(datetime.datetime.now(), datetime.datetime.now())
     threading.Event().wait()
 # To deploy this app to the cloud as a persistent cron job, run `dbos-cloud app deploy`
-
-
-### HELPERS
-
-# A utility function to check whether we are in trading hours
-def is_trading_hours():
-    # Define the timezone for the stock exchange (Eastern Time)
-    eastern = pytz.timezone('America/New_York')
-    # Get the current time in Eastern Time
-    now = datetime.now(eastern)
-    if now.hour < 9 or (now.hour == 9 and now.minute < 30):  # Before 9:30 AM
-        return False
-    if now.hour > 16 or (now.hour == 16 and now.minute > 0):  # After 4:00 PM
-        return False
-    return True
