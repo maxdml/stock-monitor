@@ -15,6 +15,7 @@ database:
   password: ${PGPASSWORD}
   migrate:
     - alembic upgrade head
+  local_suffix: false
 telemetry:
   logs:
     logLevel: INFO

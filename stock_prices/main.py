@@ -34,26 +34,23 @@ def fetch_stock_price(symbol):
 def save_to_db(symbol, price):
     DBOS.sql_session.execute(stock_prices.insert().values(stock_symbol=symbol, stock_price=price))
 
-# Now, let's write a function that will send a SMS to our number whenever a stock price goes above a certain threshold.
+# Now, let's write a function that will send an SMS alert.
 # We will use Twilio for this. You can sign up for a free Twilio account at https://www.twilio.com/try-twilio
-# We will use environment variables to store our Twilio account SID, auth token, phone number, and our own phone number.
-# See dbos-config.yaml
+# We define use environment variables dbos-config.yaml to store our Twilio account SID, auth token, phone number, and our own phone number.
 twilio_account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
 twilio_auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
 twilio_phone_number = os.environ.get('TWILIO_PHONE_NUMBER')
-my_phone_number = os.environ.get('MY_PHONE_NUMBER')
-# Define a list of stock symbols to monitor and their respective alert thresholds.
 @DBOS.step()
-def send_sms_alert(symbol, price):
+def send_sms_alert(symbol, price, to_phone_number):
     client = Client(twilio_account_sid, twilio_auth_token)
     message = client.messages.create(
         body=f"{symbol} stock price is {price}.",
         from_=twilio_phone_number,
-        to=my_phone_number
+        to=to_phone_number
     )
     DBOS.logger.info(f"SMS sent: {message.sid}")
 
-# We need a small function to retrieve alerts from the database
+# Let's write a small function to retrieve alerts from the database
 @DBOS.transaction()
 def fetch_alerts():
     query = alerts.select()
@@ -61,8 +58,7 @@ def fetch_alerts():
 
 # Then, let's write a scheduled job that fetches stock prices for a list of symbols every minute.
 # The @DBOS.scheduled() decorator tells DBOS to run this function on a cron schedule.
-# The @DBOS.workflow() decorator tells DBOS to run this function as a reliable workflow,
-# so it runs exactly-once per minute and you'll never record a duplicate.
+# The @DBOS.workflow() decorator tells DBOS to run this function as a reliable workflow, so it runs exactly-once per minute.
 symbols = ['AAPL', 'GOOGL', 'AMZN', 'MSFT', 'TSLA', 'NVDA']
 @DBOS.scheduled('* * * * *')
 @DBOS.workflow()
@@ -76,13 +72,11 @@ def fetch_stock_prices_workflow(scheduled_time: datetime, actual_time: datetime)
         # If there is a registered alert for that symbol, send a SMS if the price is above the alert threshold
         if registered_alerts and symbol in registered_alerts:
             if price > registered_alerts[symbol].price_threshold:
-                send_sms_alert(symbol, price)
+                send_sms_alert(symbol, price, registered_alerts[symbol].phone_number)
 
 # Finally, in our main function, let's launch DBOS, then sleep the main thread forever
 # while the background threads run.
 if __name__ == "__main__":
     DBOS.launch()
-    # Run the workflow manually once
-    fetch_stock_prices_workflow(datetime.datetime.now(), datetime.datetime.now())
     threading.Event().wait()
 # To deploy this app to the cloud as a persistent cron job, run `dbos-cloud app deploy`
